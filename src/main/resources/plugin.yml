@@ -1,0 +1,20 @@
+name: autopickup
+version: '1.0'
+main: NJ.autopickup.Autopickup
+api-version: '1.21'
+
+commands:
+  autopickup:
+    description: Toggle autopickup feature, sound effects, and shift requirement
+    usage: |
+      /autopickup - 查看當前設定
+      /autopickup [true/false] - 切換自動撿取功能
+      /autopickup sound [true/false] - 切換聲音效果
+      /autopickup shift [true/false] - 切換Shift需求
+    permission: autopickup.use
+    tab-complete: true
+
+permissions:
+  autopickup.use:
+    description: Allows use of autopickup features
+    default: true
