@@ -14,6 +14,7 @@ import org.bukkit.command.TabCompleter;
 import org.bukkit.Location;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.Item;
+import org.bukkit.entity.Entity;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.PlayerInventory;
 import org.bukkit.World;
@@ -265,42 +266,36 @@ public class Autopickup extends JavaPlugin implements Listener, CommandExecutor,
         World world = coords.getWorld();
         if (world == null) return;
 
-        // 創建搜索區域 (1x1x1方塊)
-        BoundingBox searchBox = BoundingBox.of(coords, coords.clone().add(1, 1, 1));
-
-        // 找到該區域內的所有掉落物
-        Collection<Item> items = world.getNearbyEntitiesByType(
-                Item.class,
+        Collection<Entity> nearbyEntities = world.getNearbyEntities(
                 coords.clone().add(0.5, 0.5, 0.5), // 中心點
-                1.5 // 搜索半徑
+                1.5, 1.5, 1.5 // x, y, z 範圍
         );
 
-        boolean hasPickedUp = false; // 追蹤是否有撿取物品
+        boolean hasPickedUp = false;
 
-        for (Item item : items) {
-            // 檢查物品是否在正確的撿取延遲狀態 (pickup delay = 10)
+        for (Entity entity : nearbyEntities) {
+            if (!(entity instanceof Item)) continue; // 只處理 Item 實體
+
+            Item item = (Item) entity;
+
+            // 檢查物品是否在正確的撿取延遲狀態
             if (item.getPickupDelay() != 10) continue;
 
             ItemStack itemStack = item.getItemStack();
-            ItemStack currentEntityItem = itemStack.clone();
 
             try {
                 // 嘗試添加到玩家背包
                 if (addItemToInventory(player, itemStack)) {
                     // 成功添加到背包，移除掉落物
                     item.remove();
-                    hasPickedUp = true; // 標記有撿取物品
+                    hasPickedUp = true;
                 }
-                // 如果無法添加到背包，物品會留在地上
-
             } catch (Exception e) {
-                // 發生異常時移除物品
                 item.remove();
-                hasPickedUp = true; // 即使異常也算撿取了
+                hasPickedUp = true;
             }
         }
 
-        // 如果有撿取物品，播放撿取聲音
         if (hasPickedUp) {
             playPickupSound(player);
         }
