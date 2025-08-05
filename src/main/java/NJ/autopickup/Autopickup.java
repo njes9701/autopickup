@@ -19,15 +19,22 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.PlayerInventory;
 import org.bukkit.World;
 import org.bukkit.Material;
-import org.bukkit.util.BoundingBox;
 import org.bukkit.ChatColor;
 import org.bukkit.Sound;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
-import net.md_5.bungee.api.chat.ClickEvent;
-import net.md_5.bungee.api.chat.ComponentBuilder;
-import net.md_5.bungee.api.chat.HoverEvent;
-import net.md_5.bungee.api.chat.TextComponent;
+
+// Dialog API imports
+import io.papermc.paper.dialog.Dialog;
+import io.papermc.paper.registry.data.dialog.DialogRegistryEntry;
+import io.papermc.paper.registry.data.dialog.DialogBase;
+import io.papermc.paper.registry.data.dialog.ActionButton;
+import io.papermc.paper.registry.data.dialog.action.DialogAction;
+import io.papermc.paper.registry.data.dialog.type.DialogType;
+import io.papermc.paper.registry.data.dialog.type.MultiActionType;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.event.ClickEvent;
 
 import java.util.Collection;
 import java.util.HashMap;
@@ -36,14 +43,15 @@ import java.util.UUID;
 import java.util.List;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.io.File;
 import java.io.IOException;
 
 public class Autopickup extends JavaPlugin implements Listener, CommandExecutor, TabCompleter {
 
-    private Map<UUID, Boolean> playerSettings = new HashMap<>();
-    private Map<UUID, Boolean> playerSoundSettings = new HashMap<>(); // 聲音設定
-    private Map<UUID, Boolean> playerShiftSettings = new HashMap<>(); // Shift設定
+    private final Map<UUID, Boolean> playerSettings = new HashMap<>();
+    private final Map<UUID, Boolean> playerSoundSettings = new HashMap<>(); // 聲音設定
+    private final Map<UUID, Boolean> playerShiftSettings = new HashMap<>(); // Shift設定
     private File dataFile;
     private FileConfiguration dataConfig;
 
@@ -149,8 +157,8 @@ public class Autopickup extends JavaPlugin implements Listener, CommandExecutor,
         UUID uuid = player.getUniqueId();
 
         if (args.length == 0) {
-            // 顯示可點擊的設定介面
-            sendClickableSettings(player);
+            // 顯示 Dialog 設定介面
+            showDialogSettings(player);
             return true;
         }
 
@@ -173,7 +181,7 @@ public class Autopickup extends JavaPlugin implements Listener, CommandExecutor,
             savePlayerData();
 
             // 重新顯示設定介面
-            sendClickableSettings(player);
+            showDialogSettings(player);
             return true;
         }
 
@@ -196,7 +204,7 @@ public class Autopickup extends JavaPlugin implements Listener, CommandExecutor,
             savePlayerData();
 
             // 重新顯示設定介面
-            sendClickableSettings(player);
+            showDialogSettings(player);
             return true;
         }
 
@@ -219,7 +227,7 @@ public class Autopickup extends JavaPlugin implements Listener, CommandExecutor,
             savePlayerData();
 
             // 重新顯示設定介面
-            sendClickableSettings(player);
+            showDialogSettings(player);
             return true;
         }
 
@@ -228,6 +236,106 @@ public class Autopickup extends JavaPlugin implements Listener, CommandExecutor,
         player.sendMessage(ChatColor.RED + "  /autopickup sound [true/false]");
         player.sendMessage(ChatColor.RED + "  /autopickup shift [true/false]");
         return true;
+    }
+
+    /**
+     * 顯示 Dialog 設定介面（採用簡潔且與測試一致的 Builder 寫法）
+     */
+    private void showDialogSettings(Player player) {
+        try {
+
+
+            UUID uuid = player.getUniqueId();
+            boolean enabled = playerSettings.getOrDefault(uuid, false);
+            boolean soundEnabled = playerSoundSettings.getOrDefault(uuid, true);
+            boolean shiftRequired = playerShiftSettings.getOrDefault(uuid, true);
+
+            Dialog settingsDialog = Dialog.create(builderFactory -> {
+                try {
+                    DialogRegistryEntry.Builder builder = builderFactory.empty();
+
+                    List<ActionButton> buttons = new ArrayList<>();
+
+                    // 功能開關
+                    Component functionText = enabled
+                            ? Component.text("功能狀態: ", NamedTextColor.WHITE).append(Component.text("開啟", NamedTextColor.GREEN))
+                            : Component.text("功能狀態: ", NamedTextColor.WHITE).append(Component.text("關閉", NamedTextColor.RED));
+                    String functionCmd = enabled ? "/autopickup false" : "/autopickup true";
+                    buttons.add(ActionButton.builder(functionText)
+                            .action(DialogAction.staticAction(
+                                    ClickEvent.clickEvent(ClickEvent.Action.RUN_COMMAND, functionCmd)))
+                            .build());
+
+                    // 聲音開關
+                    Component soundText = soundEnabled
+                            ? Component.text("聲音效果: ", NamedTextColor.WHITE).append(Component.text("開啟", NamedTextColor.GREEN))
+                            : Component.text("聲音效果: ", NamedTextColor.WHITE).append(Component.text("關閉", NamedTextColor.RED));
+                    String soundCmd = soundEnabled ? "/autopickup sound false" : "/autopickup sound true";
+                    buttons.add(ActionButton.builder(soundText)
+                            .action(DialogAction.staticAction(
+                                    ClickEvent.clickEvent(ClickEvent.Action.RUN_COMMAND, soundCmd)))
+                            .build());
+
+                    // Shift 需求
+                    Component shiftText = shiftRequired
+                            ? Component.text("需要Shift: ", NamedTextColor.WHITE).append(Component.text("是", NamedTextColor.GREEN))
+                            : Component.text("需要Shift: ", NamedTextColor.WHITE).append(Component.text("否", NamedTextColor.RED));
+                    String shiftCmd = shiftRequired ? "/autopickup shift false" : "/autopickup shift true";
+                    buttons.add(ActionButton.builder(shiftText)
+                            .action(DialogAction.staticAction(
+                                    ClickEvent.clickEvent(ClickEvent.Action.RUN_COMMAND, shiftCmd)))
+                            .build());
+
+                    // 三欄並排
+                    MultiActionType dialogType = DialogType.multiAction(buttons, null, 3);
+
+                    DialogBase dialogBase = DialogBase.builder(Component.text("AutoPickup 設定", NamedTextColor.YELLOW))
+                            .canCloseWithEscape(true)
+                            .pause(false)
+                            .afterAction(DialogBase.DialogAfterAction.CLOSE)
+                            .body(Collections.emptyList())
+                            .inputs(Collections.emptyList())
+                            .build();
+
+                    builder.base(dialogBase).type(dialogType);
+
+                } catch (Exception e) {
+                    getLogger().severe("建立設定對話框時發生錯誤: " + e.getMessage());
+                    e.printStackTrace();
+                }
+            });
+
+            showDialogToPlayer(player, settingsDialog);
+
+        } catch (Exception e) {
+            getLogger().warning("Dialog API 不可用或顯示失敗，回退到聊天介面: " + e.getMessage());
+            sendClickableSettings(player);
+        }
+    }
+
+    /**
+     * 檢查是否支持 Dialog API
+     */
+    private boolean hasDialogSupport() {
+        try {
+            Player.class.getMethod("showDialog", Dialog.class);
+            return true;
+        } catch (NoSuchMethodException e) {
+            return false;
+        }
+    }
+
+    /**
+     * 顯示對話框給玩家
+     */
+    private void showDialogToPlayer(Player player, Dialog dialog) {
+        try {
+            player.showDialog(dialog);
+        } catch (Exception e) {
+            getLogger().warning("無法使用對話框 API: " + e.getMessage());
+            getLogger().info("回退到傳統聊天界面");
+            sendClickableSettings(player);
+        }
     }
 
     @EventHandler
@@ -302,7 +410,7 @@ public class Autopickup extends JavaPlugin implements Listener, CommandExecutor,
     }
 
     /**
-     * 發送可點擊的設定介面
+     * 發送可點擊的設定介面 (保留作為後備方案)
      */
     private void sendClickableSettings(Player player) {
         UUID uuid = player.getUniqueId();
@@ -310,71 +418,60 @@ public class Autopickup extends JavaPlugin implements Listener, CommandExecutor,
         boolean soundEnabled = playerSoundSettings.getOrDefault(uuid, true);
         boolean shiftRequired = playerShiftSettings.getOrDefault(uuid, true);
 
-        // 標題
-        player.sendMessage(ChatColor.YELLOW + "=== AutoPickup 設定 ===");
+        // 使用 Adventure API 發送消息
+        player.sendMessage(Component.text("=== AutoPickup 設定 ===", NamedTextColor.YELLOW));
 
         // 功能狀態行
-        TextComponent functionLine = new TextComponent(ChatColor.YELLOW + "功能狀態: ");
-        TextComponent functionStatus = new TextComponent();
-        if (enabled) {
-            functionStatus.setText(ChatColor.GREEN + "開啟");
-            functionStatus.setClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/autopickup false"));
-            functionStatus.setHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT,
-                    new ComponentBuilder(ChatColor.RED + "點擊關閉自動撿取功能").create()));
-        } else {
-            functionStatus.setText(ChatColor.RED + "關閉");
-            functionStatus.setClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/autopickup true"));
-            functionStatus.setHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT,
-                    new ComponentBuilder(ChatColor.GREEN + "點擊開啟自動撿取功能").create()));
-        }
-        functionLine.addExtra(functionStatus);
-        player.spigot().sendMessage(functionLine);
+        Component functionStatus = enabled
+                ? Component.text("開啟", NamedTextColor.GREEN)
+                .clickEvent(ClickEvent.runCommand("/autopickup false"))
+                .hoverEvent(Component.text("點擊關閉自動撿取功能", NamedTextColor.RED))
+                : Component.text("關閉", NamedTextColor.RED)
+                .clickEvent(ClickEvent.runCommand("/autopickup true"))
+                .hoverEvent(Component.text("點擊開啟自動撿取功能", NamedTextColor.GREEN));
+
+        Component functionLine = Component.text("功能狀態: ", NamedTextColor.YELLOW)
+                .append(functionStatus);
+        player.sendMessage(functionLine);
 
         // 聲音效果行
-        TextComponent soundLine = new TextComponent(ChatColor.YELLOW + "聲音效果: ");
-        TextComponent soundStatus = new TextComponent();
-        if (soundEnabled) {
-            soundStatus.setText(ChatColor.GREEN + "開啟");
-            soundStatus.setClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/autopickup sound false"));
-            soundStatus.setHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT,
-                    new ComponentBuilder(ChatColor.RED + "點擊關閉聲音效果").create()));
-        } else {
-            soundStatus.setText(ChatColor.RED + "關閉");
-            soundStatus.setClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/autopickup sound true"));
-            soundStatus.setHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT,
-                    new ComponentBuilder(ChatColor.GREEN + "點擊開啟聲音效果").create()));
-        }
-        soundLine.addExtra(soundStatus);
-        player.spigot().sendMessage(soundLine);
+        Component soundStatus = soundEnabled
+                ? Component.text("開啟", NamedTextColor.GREEN)
+                .clickEvent(ClickEvent.runCommand("/autopickup sound false"))
+                .hoverEvent(Component.text("點擊關閉聲音效果", NamedTextColor.RED))
+                : Component.text("關閉", NamedTextColor.RED)
+                .clickEvent(ClickEvent.runCommand("/autopickup sound true"))
+                .hoverEvent(Component.text("點擊開啟聲音效果", NamedTextColor.GREEN));
+
+        Component soundLine = Component.text("聲音效果: ", NamedTextColor.YELLOW)
+                .append(soundStatus);
+        player.sendMessage(soundLine);
 
         // Shift需求行
-        TextComponent shiftLine = new TextComponent(ChatColor.YELLOW + "需要Shift: ");
-        TextComponent shiftStatus = new TextComponent();
-        if (shiftRequired) {
-            shiftStatus.setText(ChatColor.GREEN + "是");
-            shiftStatus.setClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/autopickup shift false"));
-            shiftStatus.setHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT,
-                    new ComponentBuilder(ChatColor.RED + "點擊取消Shift需求").create()));
-        } else {
-            shiftStatus.setText(ChatColor.RED + "否");
-            shiftStatus.setClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/autopickup shift true"));
-            shiftStatus.setHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT,
-                    new ComponentBuilder(ChatColor.GREEN + "點擊開啟Shift需求").create()));
-        }
-        shiftLine.addExtra(shiftStatus);
-        player.spigot().sendMessage(shiftLine);
+        Component shiftStatus = shiftRequired
+                ? Component.text("是", NamedTextColor.GREEN)
+                .clickEvent(ClickEvent.runCommand("/autopickup shift false"))
+                .hoverEvent(Component.text("點擊取消Shift需求", NamedTextColor.RED))
+                : Component.text("否", NamedTextColor.RED)
+                .clickEvent(ClickEvent.runCommand("/autopickup shift true"))
+                .hoverEvent(Component.text("點擊開啟Shift需求", NamedTextColor.GREEN));
+
+        Component shiftLine = Component.text("需要Shift: ", NamedTextColor.YELLOW)
+                .append(shiftStatus);
+        player.sendMessage(shiftLine);
 
         // 使用說明
-        player.sendMessage("");
-        player.sendMessage(ChatColor.GRAY + "點擊上方狀態即可切換設定!");
+        player.sendMessage(Component.empty());
+        player.sendMessage(Component.text("點擊上方狀態即可切換設定!", NamedTextColor.GRAY));
         if (enabled) {
             if (shiftRequired) {
-                player.sendMessage(ChatColor.GRAY + "按住Shift挖掘即可自動撿取物品");
+                player.sendMessage(Component.text("按住Shift挖掘即可自動撿取物品", NamedTextColor.GRAY));
             } else {
-                player.sendMessage(ChatColor.GRAY + "直接挖掘即可自動撿取物品");
+                player.sendMessage(Component.text("直接挖掘即可自動撿取物品", NamedTextColor.GRAY));
             }
         }
     }
+
     private void playPickupSound(Player player) {
         UUID uuid = player.getUniqueId();
 
@@ -384,12 +481,7 @@ public class Autopickup extends JavaPlugin implements Listener, CommandExecutor,
         }
 
         // 播放撿取物品的聲音效果
-        // 使用 Minecraft 原版的撿取聲音，音量 0.5，音調 1.0
         player.playSound(player.getLocation(), Sound.ENTITY_ITEM_PICKUP, 0.5f, 1.0f);
-
-        // 可選：也可以使用其他聲音效果，比如：
-        // player.playSound(player.getLocation(), Sound.ENTITY_EXPERIENCE_ORB_PICKUP, 0.3f, 1.2f);
-        // player.playSound(player.getLocation(), Sound.UI_BUTTON_CLICK, 0.3f, 1.5f);
     }
 
     /**
@@ -454,7 +546,6 @@ public class Autopickup extends JavaPlugin implements Listener, CommandExecutor,
      * 檢查物品是否有組件數據 (簡化版檢查)
      */
     private boolean hasComponents(ItemStack itemStack) {
-        // 在PaperMC中，可以檢查物品是否有自定義數據
         return itemStack.hasItemMeta() &&
                 (itemStack.getItemMeta().hasDisplayName() ||
                         itemStack.getItemMeta().hasLore() ||
@@ -467,7 +558,6 @@ public class Autopickup extends JavaPlugin implements Listener, CommandExecutor,
     private boolean itemStacksMatch(ItemStack item1, ItemStack item2) {
         if (item1.getType() != item2.getType()) return false;
 
-        // 簡化的NBT比較 - 比較ItemMeta
         if (item1.hasItemMeta() != item2.hasItemMeta()) return false;
 
         if (item1.hasItemMeta()) {
