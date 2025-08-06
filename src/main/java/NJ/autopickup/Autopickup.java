@@ -157,7 +157,7 @@ public class Autopickup extends JavaPlugin implements Listener, CommandExecutor,
         UUID uuid = player.getUniqueId();
 
         if (args.length == 0) {
-            // 顯示 Dialog 設定介面
+            // 只顯示 Dialog 設定介面
             showDialogSettings(player);
             return true;
         }
@@ -171,16 +171,12 @@ public class Autopickup extends JavaPlugin implements Listener, CommandExecutor,
             } else if (arg.equals("false") || arg.equals("off") || arg.equals("關") || arg.equals("關閉")) {
                 newState = false;
             } else {
-                player.sendMessage(ChatColor.RED + "無效參數! 請使用 true 或 false");
+                player.sendMessage(Component.text("無效參數! 請使用 true 或 false", NamedTextColor.RED));
                 return true;
             }
 
             playerSettings.put(uuid, newState);
-
-            // 立即保存設定
             savePlayerData();
-
-            // 重新顯示設定介面
             showDialogSettings(player);
             return true;
         }
@@ -194,16 +190,12 @@ public class Autopickup extends JavaPlugin implements Listener, CommandExecutor,
             } else if (arg.equals("false") || arg.equals("off") || arg.equals("關") || arg.equals("關閉")) {
                 newSoundState = false;
             } else {
-                player.sendMessage(ChatColor.RED + "無效參數! 請使用 sound true 或 sound false");
+                player.sendMessage(Component.text("無效參數! 請使用 sound true 或 sound false", NamedTextColor.RED));
                 return true;
             }
 
             playerSoundSettings.put(uuid, newSoundState);
-
-            // 立即保存設定
             savePlayerData();
-
-            // 重新顯示設定介面
             showDialogSettings(player);
             return true;
         }
@@ -217,34 +209,28 @@ public class Autopickup extends JavaPlugin implements Listener, CommandExecutor,
             } else if (arg.equals("false") || arg.equals("off") || arg.equals("關") || arg.equals("關閉")) {
                 newShiftState = false;
             } else {
-                player.sendMessage(ChatColor.RED + "無效參數! 請使用 shift true 或 shift false");
+                player.sendMessage(Component.text("無效參數! 請使用 shift true 或 shift false", NamedTextColor.RED));
                 return true;
             }
 
             playerShiftSettings.put(uuid, newShiftState);
-
-            // 立即保存設定
             savePlayerData();
-
-            // 重新顯示設定介面
             showDialogSettings(player);
             return true;
         }
 
-        player.sendMessage(ChatColor.RED + "用法:");
-        player.sendMessage(ChatColor.RED + "  /autopickup [true/false]");
-        player.sendMessage(ChatColor.RED + "  /autopickup sound [true/false]");
-        player.sendMessage(ChatColor.RED + "  /autopickup shift [true/false]");
+        player.sendMessage(Component.text("用法:", NamedTextColor.RED));
+        player.sendMessage(Component.text("  /autopickup [true/false]", NamedTextColor.RED));
+        player.sendMessage(Component.text("  /autopickup sound [true/false]", NamedTextColor.RED));
+        player.sendMessage(Component.text("  /autopickup shift [true/false]", NamedTextColor.RED));
         return true;
     }
 
     /**
-     * 顯示 Dialog 設定介面（採用簡潔且與測試一致的 Builder 寫法）
+     * 顯示 Dialog 設定介面（只保留 Dialog，移除傳統聊天方法）
      */
     private void showDialogSettings(Player player) {
         try {
-
-
             UUID uuid = player.getUniqueId();
             boolean enabled = playerSettings.getOrDefault(uuid, false);
             boolean soundEnabled = playerSoundSettings.getOrDefault(uuid, true);
@@ -298,43 +284,20 @@ public class Autopickup extends JavaPlugin implements Listener, CommandExecutor,
                             .build();
 
                     builder.base(dialogBase).type(dialogType);
-
                 } catch (Exception e) {
                     getLogger().severe("建立設定對話框時發生錯誤: " + e.getMessage());
                     e.printStackTrace();
                 }
             });
 
-            showDialogToPlayer(player, settingsDialog);
+            // 直接顯示對話框，移除後備方案
+            player.showDialog(settingsDialog);
+            getLogger().info("AutoPickup Dialog 顯示成功!");
 
         } catch (Exception e) {
-            getLogger().warning("Dialog API 不可用或顯示失敗，回退到聊天介面: " + e.getMessage());
-            sendClickableSettings(player);
-        }
-    }
-
-    /**
-     * 檢查是否支持 Dialog API
-     */
-    private boolean hasDialogSupport() {
-        try {
-            Player.class.getMethod("showDialog", Dialog.class);
-            return true;
-        } catch (NoSuchMethodException e) {
-            return false;
-        }
-    }
-
-    /**
-     * 顯示對話框給玩家
-     */
-    private void showDialogToPlayer(Player player, Dialog dialog) {
-        try {
-            player.showDialog(dialog);
-        } catch (Exception e) {
-            getLogger().warning("無法使用對話框 API: " + e.getMessage());
-            getLogger().info("回退到傳統聊天界面");
-            sendClickableSettings(player);
+            getLogger().severe("Dialog API 發生錯誤: " + e.getMessage());
+            e.printStackTrace();
+            player.sendMessage(Component.text("對話框顯示失敗，請檢查服務器版本是否支持 Dialog API", NamedTextColor.RED));
         }
     }
 
@@ -406,69 +369,6 @@ public class Autopickup extends JavaPlugin implements Listener, CommandExecutor,
 
         if (hasPickedUp) {
             playPickupSound(player);
-        }
-    }
-
-    /**
-     * 發送可點擊的設定介面 (保留作為後備方案)
-     */
-    private void sendClickableSettings(Player player) {
-        UUID uuid = player.getUniqueId();
-        boolean enabled = playerSettings.getOrDefault(uuid, false);
-        boolean soundEnabled = playerSoundSettings.getOrDefault(uuid, true);
-        boolean shiftRequired = playerShiftSettings.getOrDefault(uuid, true);
-
-        // 使用 Adventure API 發送消息
-        player.sendMessage(Component.text("=== AutoPickup 設定 ===", NamedTextColor.YELLOW));
-
-        // 功能狀態行
-        Component functionStatus = enabled
-                ? Component.text("開啟", NamedTextColor.GREEN)
-                .clickEvent(ClickEvent.runCommand("/autopickup false"))
-                .hoverEvent(Component.text("點擊關閉自動撿取功能", NamedTextColor.RED))
-                : Component.text("關閉", NamedTextColor.RED)
-                .clickEvent(ClickEvent.runCommand("/autopickup true"))
-                .hoverEvent(Component.text("點擊開啟自動撿取功能", NamedTextColor.GREEN));
-
-        Component functionLine = Component.text("功能狀態: ", NamedTextColor.YELLOW)
-                .append(functionStatus);
-        player.sendMessage(functionLine);
-
-        // 聲音效果行
-        Component soundStatus = soundEnabled
-                ? Component.text("開啟", NamedTextColor.GREEN)
-                .clickEvent(ClickEvent.runCommand("/autopickup sound false"))
-                .hoverEvent(Component.text("點擊關閉聲音效果", NamedTextColor.RED))
-                : Component.text("關閉", NamedTextColor.RED)
-                .clickEvent(ClickEvent.runCommand("/autopickup sound true"))
-                .hoverEvent(Component.text("點擊開啟聲音效果", NamedTextColor.GREEN));
-
-        Component soundLine = Component.text("聲音效果: ", NamedTextColor.YELLOW)
-                .append(soundStatus);
-        player.sendMessage(soundLine);
-
-        // Shift需求行
-        Component shiftStatus = shiftRequired
-                ? Component.text("是", NamedTextColor.GREEN)
-                .clickEvent(ClickEvent.runCommand("/autopickup shift false"))
-                .hoverEvent(Component.text("點擊取消Shift需求", NamedTextColor.RED))
-                : Component.text("否", NamedTextColor.RED)
-                .clickEvent(ClickEvent.runCommand("/autopickup shift true"))
-                .hoverEvent(Component.text("點擊開啟Shift需求", NamedTextColor.GREEN));
-
-        Component shiftLine = Component.text("需要Shift: ", NamedTextColor.YELLOW)
-                .append(shiftStatus);
-        player.sendMessage(shiftLine);
-
-        // 使用說明
-        player.sendMessage(Component.empty());
-        player.sendMessage(Component.text("點擊上方狀態即可切換設定!", NamedTextColor.GRAY));
-        if (enabled) {
-            if (shiftRequired) {
-                player.sendMessage(Component.text("按住Shift挖掘即可自動撿取物品", NamedTextColor.GRAY));
-            } else {
-                player.sendMessage(Component.text("直接挖掘即可自動撿取物品", NamedTextColor.GRAY));
-            }
         }
     }
 
